@@ -1,62 +1,23 @@
 = modern-gitops-stack-module-cluster-eks
 
-A https://modern-gitops-stack.io/[Modern GitOps Stack] module to deploy a Kubernetes cluster on Amazon Web Services EKS.
+A https://modern-gitops-stack.io[Modern GitOps Stack] module to deploy an Amazon EKS cluster and its managed node groups.
 
-This module creates https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html[EKS managed nodes] by default, bug also supports https://docs.aws.amazon.com/eks/latest/userguide/worker.html[self-managed node groups] by setting the variable `use_self_managed_node_groups` to `true`. It uses the Terraform https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest[module "eks" by AWS] to manage the cluster itself.
+== Usage
 
-The `node_groups` variable is a map of objects. Each value of the map creates a node group referenced by its label. The value object can take any input accepted by the https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest/submodules/eks-managed-node-group[eks-managed-node-group] or https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest/submodules/self-managed-node-group[self-managed-node-group] submodule.
+This module can be declared by adding the following block to your Terraform configuration:
 
-Here is an example that creates one EKS managed node group with 3 instances of type `r5a.large`, attaches them to the cluster Load Balancer(s), and customizes the base EBS volume size to 100 GB:
-
+[source,terraform]
 ----
-  node_groups = {
-    "my-node-group" = {
-      instance_types  = ["r5a.xlarge"]
-      min_size        = 3
-      max_size        = 3
-      desired_size    = 3
-      nlbs_attachment = true
+module "cluster-eks" {
+  source = "git::https://github.com/GersonRS/modern-gitops-stack-module-cluster-eks.git?ref=<RELEASE>"
 
-      block_device_mappings = {
-        "default" = {
-          device_name = "/dev/xvda"
-          ebs = {
-            volume_size = 100
-          }
-        }
-      }
-    },
-  }
+  cluster_name   = local.cluster_name
+  base_domain    = local.base_domain
+  subdomain      = local.subdomain
+  cluster_issuer = local.cluster_issuer
+  app_autosync   = local.app_autosync
+}
 ----
-
-[NOTE]
-====
-When using self-managed node groups, the instance type is instead given as a single string value instead of an array:
-
-----
-      instance_type     = "r5a.xlarge"
-----
-====
-
-TIP: You can check out available instance types on the https://aws.amazon.com/ec2/instance-types[official AWS documentation pages].
-
-Depending on the `create_public_nlb` and `create_private_nlb` variables, it creates a public and/or public Network Load Balancer(s). The node groups that have the `target_group_arns = module.my_cluster.nlb_target_groups` value set will be added as backends of the LBs. By default, the LBs only forward traffic on the ports `80` and `443`, but you can customize this using the `extra_lb_target_groups` and `extra_lb_http_tcp_listeners` variables to add other ports. Look at the `lb.tf` file in this module for the syntax.
-
-This module needs a Route 53 DNS zone in the same AWS account to create a wildcard CNAME record that points to the Network LB. The DNS zone must be passed in the `base_domain` variable. This record is used by other Modern GitOps Stack modules as default URLs for their applications.
-
-== Upgrading from versions earlier than 3.x
-
-The versions 2.x and earlier of this module created https://docs.aws.amazon.com/eks/latest/userguide/worker.html[self-managed node groups] exclusively. Upgrading to versions 3.x or later requires setting the variable `use_self_managed_node_groups` to `true` to avoid breaking existing clusters.
-
-[NOTE]
-====
-When going from self-managed node groups to EKS managed ones, note the following changes in node groups arguments:
-
-- The `instance_type` argument is replaced with `instance_types` and accepts a list of strings,
-- The `target_group_arns` argument isn't supported anymore. Instead set `nlbs_attachment = true`.
-====
-
-Switching an existing cluster to EKS managed node groups is possible, but requires manually draining the existing nodes after the new node group is created and before the old one is destroyed (by doing a `terraform apply -target <resource>` in multiple steps).
 
 == Technical Reference
 
